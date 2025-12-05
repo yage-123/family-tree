@@ -106,7 +106,7 @@ const FamilyContext = createContext<FamilyStore | null>(null);
 export function FamilyProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<FamilyState>({ people: [], edges: [], spouses: [] });
   const [loaded, setLoaded] = useState(false);
-
+  
   useEffect(() => {
     (async () => {
       try {
