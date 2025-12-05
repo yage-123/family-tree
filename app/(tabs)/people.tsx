@@ -33,15 +33,43 @@ function spouseKey(a: string, b: string) {
 
 export default function PeopleScreen() {
   const { people, edges, spouses, removePerson, addEdge, removeEdge, addSpouse, removeSpouse, resetAll } = useFamily();
-
+ 
   const peopleById = useMemo(() => new Map(people.map((p) => [p.id, p])), [people]);
+  
+  const spouseOf = useMemo(() => {
+  const m = new Map<string, string>();
+  for (const s of spouses) {
+    m.set(s.aId, s.bId);
+    m.set(s.bId, s.aId);
+  }
+  return m;
+  }, [spouses]);
+
+// 親の選び方を「基準人物」と「どっち側」を分ける
+  const [selectedParentBase, setSelectedParentBase] = useState<string | null>(null);
+  const [parentSide, setParentSide] = useState<"self" | "both">("self");
+
+  // 子は今まで通り（すでにあるならそのままでOK）
+  const [selectedChild, setSelectedChild] = useState<string | null>(null);
+
+const selectedParentId = useMemo(() => {
+  if (!selectedParentBase) return null;
+
+  const sp = spouseOf.get(selectedParentBase);
+
+  // 配偶者側が選ばれてて、配偶者がいるなら配偶者IDを返す
+  if (parentSide === "both" && sp) return sp;
+
+  // それ以外は本人
+  return selectedParentBase;
+}, [selectedParentBase, parentSide, spouseOf]);
+
+
 
   // ★ 夫婦/親子選択状態
   const [selectedSpA, setSelectedSpA] = useState<string | null>(null);
   const [selectedSpB, setSelectedSpB] = useState<string | null>(null);
-  const [selectedParent, setSelectedParent] = useState<string | null>(null);
-  const [selectedChild, setSelectedChild] = useState<string | null>(null);
-
+  
   // ★ 共通モーダル（追加/編集）
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingPerson, setEditingPerson] = useState<Person | null>(null);
@@ -143,15 +171,41 @@ export default function PeopleScreen() {
 
           <Text style={styles.pickerLabel}>親</Text>
           <FlatList
+          
             data={people}
             keyExtractor={(p) => p.id}
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={{ gap: 8 }}
             renderItem={({ item }) => (
-              <Chip label={item.name} active={selectedParent === item.id} onPress={() => setSelectedParent(item.id)} />
+              <Chip label={item.name} 
+              active={selectedParentBase === item.id}
+              onPress={() => {
+                setSelectedParentBase(item.id);
+                setParentSide("self"); // 親を選び直したら本人側に戻す
+                  }} />
             )}
           />
+          {/* 既婚の親を選んだ時だけ「本人 or 両方」を選べる */}
+{selectedParentBase && spouseOf.get(selectedParentBase) ? (
+  <View style={{ marginTop: 10, gap: 8 }}>
+    <Text style={styles.muted}>どちらから線を引く？</Text>
+
+    <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
+      <Chip
+        label="本人側"
+        active={parentSide === "self"}
+        onPress={() => setParentSide("self")}
+      />
+      <Chip
+        label="両方"
+        active={parentSide === "both"}
+        onPress={() => setParentSide("both")}
+      />
+    </View>
+  </View>
+) : null}
+
 
           <Text style={[styles.pickerLabel, { marginTop: 10 }]}>子</Text>
           <FlatList
@@ -166,13 +220,37 @@ export default function PeopleScreen() {
           />
 
           <TouchableOpacity
-            style={[styles.primaryBtn, { marginTop: 12 }]}
-            onPress={() => {
-              if (!selectedParent || !selectedChild) return;
-              if (selectedParent === selectedChild) return;
-              addEdge(selectedParent, selectedChild);
-            }}
-          >
+          style={[styles.primaryBtn, { marginTop: 12 }]}
+          onPress={() => {
+  if (!selectedParentBase || !selectedChild) return;
+
+  // 親と子が同一人物になるのを防ぐ
+  if (selectedParentBase === selectedChild) return;
+
+  const spouseId = spouseOf.get(selectedParentBase); // 既婚ならここに相手ID
+
+  // 既婚で「両方」なら、本人＋配偶者の両方に同じ子を紐付ける
+  if (spouseId && parentSide === "both") {
+    // 子に「配偶者本人」を選んでた場合も防ぐ（事故回避）
+    if (spouseId === selectedChild) return;
+
+    // 本人 -> 子（まずは必ず追加）
+    addEdge(selectedParentBase, selectedChild);
+
+    // 配偶者 -> 子（すでにあるなら追加しない）
+    const exists = edges.some(
+      (e) => e.parentId === spouseId && e.childId === selectedChild
+    );
+    if (!exists) addEdge(spouseId, selectedChild);
+
+    return;
+  }
+
+  // それ以外（未婚 or 本人側）は、本人 -> 子 だけ
+  addEdge(selectedParentBase, selectedChild);
+}}
+>
+
             <Text style={styles.primaryBtnText}>つなぐ（親 → 子）</Text>
           </TouchableOpacity>
 
