@@ -1,41 +1,103 @@
-import { useMemo, useState } from "react";
-import { Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  Alert,
+  FlatList,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import PersonEditorModal from "../../src/components/PersonEditorModal";
 import ScreenNav from "../../src/components/ScreenNav";
 import { Person, useFamily } from "../../src/store/familyStore";
 
-
-const genderLabel = (g?: string) => (g === "male" ? "男" : g === "female" ? "女" : g === "other" ? "その他" : "不明");
-const bloodLabel = (b?: string) => (b === "A" || b === "B" || b === "AB" || b === "O" ? b : "不明");
+const genderLabel = (g?: string) =>
+  g === "male" ? "男" : g === "female" ? "女" : g === "other" ? "その他" : "不明";
+const bloodLabel = (b?: string) =>
+  b === "A" || b === "B" || b === "AB" || b === "O" ? b : "不明";
 
 export default function ManageScreen() {
   const { people, removePerson, resetAll } = useFamily();
 
-  // 編集モーダル
+  // 編集/追加モーダル（追加時は person=null）
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingPerson, setEditingPerson] = useState<Person | null>(null);
 
   const list = useMemo(() => [...people].reverse(), [people]);
+
+  // ===== 「＋人物を追加」を出す制御 =====
+  const [showAdd, setShowAdd] = useState(false);
+  const [atBottom, setAtBottom] = useState(false);
+  const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearIdle = () => {
+    if (idleTimer.current) {
+      clearTimeout(idleTimer.current);
+      idleTimer.current = null;
+    }
+  };
+
+  const startIdle = () => {
+    clearIdle();
+    idleTimer.current = setTimeout(() => {
+      // 3秒アイドル後：一番下なら常に出す／一番下じゃなくても出す（仕様通り）
+      setShowAdd(true);
+    }, 3000);
+  };
+
+  // 初期：人がいないならすぐ出す（追加できないと困るので）
+  useEffect(() => {
+    if (list.length === 0) {
+      setShowAdd(true);
+      clearIdle();
+      return;
+    }
+    // リストがある場合は「3秒後に出す」を開始
+    startIdle();
+    return clearIdle;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [list.length]);
 
   const onEdit = (p: Person) => {
     setEditingPerson(p);
     setEditorOpen(true);
   };
 
+  const onAdd = () => {
+    setEditingPerson(null);
+    setEditorOpen(true);
+  };
+
   const onDelete = (p: Person) => {
-    Alert.alert("削除", `「${p.name}」を削除します。よろしいですか？\n（親子/夫婦の関係も自動で整理されます）`, [
-      { text: "キャンセル", style: "cancel" },
-      { text: "削除する", style: "destructive", onPress: () => removePerson(p.id) },
-    ]);
+    Alert.alert(
+      "削除",
+      `「${p.name}」を削除します。よろしいですか？\n（親子/夫婦の関係も自動で整理されます）`,
+      [
+        { text: "キャンセル", style: "cancel" },
+        { text: "削除する", style: "destructive", onPress: () => removePerson(p.id) },
+      ]
+    );
+  };
+
+  const checkAtBottom = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
+    const paddingToBottom = 24; // 判定を少し甘くする
+    const isBottom =
+      layoutMeasurement.height + contentOffset.y >= contentSize.height - paddingToBottom;
+    setAtBottom(isBottom);
+    return isBottom;
   };
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} onTouchStart={() => { if (!atBottom) { setShowAdd(false); startIdle(); } }}>
       <View style={{ marginTop: 25 }}>
-      <ScreenNav title="編集" />
+        <ScreenNav title="家族登録" />
       </View>
+
       <View style={styles.headerRow}>
-        <Text style={styles.title}>登録内容編集</Text>
+        <Text style={styles.title}>家族一覧</Text>
 
         <TouchableOpacity
           onPress={() =>
@@ -52,14 +114,48 @@ export default function ManageScreen() {
       {list.length === 0 ? (
         <View style={styles.empty}>
           <Text style={styles.muted}>まだ人物がいません。</Text>
-          <Text style={styles.muted}>「家族登録」タブで追加してね。</Text>
+          <Text style={styles.muted}>下の「＋人物を追加」から追加してね。</Text>
         </View>
       ) : (
         <FlatList
           data={list}
           keyExtractor={(p) => p.id}
           ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
-          contentContainerStyle={{ paddingBottom: 24 }}
+          contentContainerStyle={{ paddingBottom: 120 }} // 下の固定バー分の余白
+          onScrollBeginDrag={() => {
+            // スクロール開始：消す
+            setShowAdd(false);
+            clearIdle();
+          }}
+          onScroll={(e) => {
+            // スクロール中：消す（下端に来たら出す）
+            const bottom = checkAtBottom(e);
+            if (bottom) {
+              setShowAdd(true);
+            } else {
+              setShowAdd(false);
+            }
+          }}
+          onScrollEndDrag={(e) => {
+            // スクロール止まった：下端なら出す／それ以外は3秒待ち
+            const bottom = checkAtBottom(e);
+            if (bottom) {
+              setShowAdd(true);
+            } else {
+              setShowAdd(false);
+              startIdle();
+            }
+          }}
+          onMomentumScrollEnd={(e) => {
+            const bottom = checkAtBottom(e);
+            if (bottom) {
+              setShowAdd(true);
+            } else {
+              setShowAdd(false);
+              startIdle();
+            }
+          }}
+          scrollEventThrottle={16}
           renderItem={({ item }) => (
             <View style={styles.card}>
               <View style={{ flex: 1 }}>
@@ -87,10 +183,19 @@ export default function ManageScreen() {
         />
       )}
 
-      {/* 編集モーダル */}
+      {/* 画面下の「＋人物を追加」 */}
+      {showAdd && (
+        <View style={styles.addBar}>
+          <TouchableOpacity style={styles.addBtn} onPress={onAdd}>
+            <Text style={styles.addBtnText}>＋ 人物を追加</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* 編集/追加モーダル */}
       <PersonEditorModal
         visible={editorOpen}
-        person={editingPerson}
+        person={editingPerson} // nullなら追加
         onClose={() => setEditorOpen(false)}
       />
     </View>
@@ -102,7 +207,6 @@ const styles = StyleSheet.create({
 
   headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 12 },
   title: { fontSize: 22, fontWeight: "900" },
-
   dangerText: { color: "#b00020", fontWeight: "900" },
 
   empty: { flex: 1, justifyContent: "center", alignItems: "center", gap: 6 },
@@ -134,4 +238,20 @@ const styles = StyleSheet.create({
 
   btnDanger: { backgroundColor: "#fff5f5", borderColor: "#ffcccc" },
   btnDangerText: { color: "#b00020" },
+
+  // 下部固定バー
+  addBar: {
+    position: "absolute",
+    left: 16,
+    right: 16,
+    bottom: 16,
+  },
+  addBtn: {
+    backgroundColor: "#111",
+    paddingVertical: 14,
+    borderRadius: 14,
+    alignItems: "center",
+  },
+  addBtnText: { color: "#fff", fontWeight: "900", fontSize: 16 },
 });
+
