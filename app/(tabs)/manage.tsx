@@ -1,7 +1,9 @@
 import { useMemo, useState } from "react";
 import { Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import PersonEditorModal from "../../src/components/PersonEditorModal";
+import ScreenNav from "../../src/components/ScreenNav";
 import { Person, useFamily } from "../../src/store/familyStore";
+
 
 const genderLabel = (g?: string) => (g === "male" ? "男" : g === "female" ? "女" : g === "other" ? "その他" : "不明");
 const bloodLabel = (b?: string) => (b === "A" || b === "B" || b === "AB" || b === "O" ? b : "不明");
@@ -29,6 +31,9 @@ export default function ManageScreen() {
 
   return (
     <View style={styles.container}>
+      <View style={{ marginTop: 25 }}>
+      <ScreenNav title="編集" />
+      </View>
       <View style={styles.headerRow}>
         <Text style={styles.title}>登録内容編集</Text>
 

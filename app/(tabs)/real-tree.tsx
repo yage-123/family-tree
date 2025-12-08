@@ -2,7 +2,11 @@ import React, { useMemo, useState } from "react";
 import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import Svg, { Line } from "react-native-svg";
 import PersonEditorModal from "../../src/components/PersonEditorModal";
+import ScreenNav from "../../src/components/ScreenNav";
+
 import { Person, useFamily } from "../../src/store/familyStore";
+
+
 
 // ========= 見た目/レイアウト調整 =========
 const CARD_W = 170;
@@ -275,7 +279,7 @@ export default function RealTreeScreen() {
   if (people.length === 0) {
     return (
       <View style={[styles.center, { backgroundColor: BG }]}>
-        <Text style={styles.title}>実話家系図</Text>
+        <Text style={styles.title}>家系図</Text>
         <Text style={styles.muted}>まだ人物がいません。「家族登録」タブで追加してね。</Text>
       </View>
     );
@@ -315,10 +319,16 @@ export default function RealTreeScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: BG }}>
+       <View style={{ marginTop: 40 }}>
+      <ScreenNav title="実話家系図" />
+      </View>
+      <View style={{ flex: 1, paddingTop: 70 }}>
+
       {/* 横→縦の2重スクロールで “キャンバス” */}
       <ScrollView horizontal showsHorizontalScrollIndicator>
         <ScrollView showsVerticalScrollIndicator>
           <View style={{ width: canvasW, height: canvasH, backgroundColor: BG }}>
+            
             {/* 線（下地） */}
             <Svg width={canvasW} height={canvasH} style={StyleSheet.absoluteFill}>
               {links.map((ln, i) => {
@@ -355,6 +365,7 @@ export default function RealTreeScreen() {
           </View>
         </ScrollView>
       </ScrollView>
+    </View>
 
       {/* 編集モーダル */}
       <PersonEditorModal visible={editorOpen} person={editingPerson} onClose={() => setEditorOpen(false)} />
