@@ -1,46 +1,202 @@
+import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import React from "react";
+import {
+  ImageBackground,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 
+// 背景画像：パスはあなたの構成に合わせて調整OK
+const BG = require("../../assets/images/top1.png");
+
+// ★ 画面ファイル名と一致させる（app/(tabs)/real-tree.tsx なら "/(tabs)/real-tree"）
 const ROUTES = {
   tree: "/(tabs)/real-tree",
   people: "/(tabs)/people",
   manage: "/(tabs)/manage",
-  settings: "/(tabs)/settings",
   help: "/(tabs)/help",
+  settings: "/(tabs)/settings",
 } as const;
 
 type Route = (typeof ROUTES)[keyof typeof ROUTES];
 
-function MenuBtn({ label, to }: { label: string; to: Route }) {
+type TileItem = {
+  label: string;
+  to: Route;
+  icon: React.ComponentProps<typeof Ionicons>["name"];
+};
+
+// 中央（縦3つ）
+const MAIN: TileItem[] = [
+  { label: "家系図", to: ROUTES.tree, icon: "git-network-outline" },
+  { label: "家族登録", to: ROUTES.people, icon: "person-add-outline" },
+  { label: "編集", to: ROUTES.manage, icon: "create-outline" },
+];
+
+// 下（横2つ）
+const BOTTOM: TileItem[] = [
+  { label: "説明書", to: ROUTES.help, icon: "help-circle-outline" },
+  { label: "環境設定", to: ROUTES.settings, icon: "settings-outline" },
+];
+
+function Tile({
+  item,
+  variant,
+}: {
+  item: TileItem;
+  variant: "main" | "bottom";
+}) {
   return (
-    <TouchableOpacity style={styles.btn} onPress={() => router.push(to)}>
-      <Text style={styles.btnText}>{label}</Text>
-    </TouchableOpacity>
+    <Pressable
+      style={({ pressed }) => [
+        styles.tileBase,
+        variant === "main" ? styles.tileMain : styles.tileBottom,
+        pressed && styles.pressed,
+      ]}
+      onPress={() => router.push(item.to)}
+    >
+      <View style={styles.left}>
+        <View style={styles.iconCircle}>
+          <Ionicons name={item.icon} size={20} color="#111" />
+        </View>
+        <Text style={styles.label} numberOfLines={1}>
+          {item.label}
+        </Text>
+      </View>
+
+      {/* 右側の余白（見た目のバランス用） */}
+      <View style={styles.rightPad} />
+    </Pressable>
   );
 }
 
 export default function HomeScreen() {
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Top画面</Text>
+    <View style={styles.root}>
+      <ImageBackground source={BG} resizeMode="cover" style={styles.bg}>
+        {/* 読みやすさ用の膜（濃さは好みで） */}
+        <View style={styles.overlay} />
 
-      <MenuBtn label="家系図" to={ROUTES.tree} />
-      <MenuBtn label="家族登録" to={ROUTES.people} />
-      <MenuBtn label="登録内容編集" to={ROUTES.manage} />
-      <MenuBtn label="環境設定" to={ROUTES.settings} />
-      <MenuBtn label="説明書" to={ROUTES.help} />
+
+        {/* 中央：縦3つ */}
+        <View style={styles.mainArea}>
+          {MAIN.map((m) => (
+            <Tile key={m.to} item={m} variant="main" />
+          ))}
+        </View>
+
+        {/* 下：横2つ */}
+        <View style={styles.bottomArea}>
+          {BOTTOM.map((b) => (
+            <View key={b.to} style={styles.bottomCell}>
+              <Tile item={b} variant="bottom" />
+            </View>
+          ))}
+        </View>
+      </ImageBackground>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, gap: 12 },
-  title: { fontSize: 22, fontWeight: "900", marginBottom: 8 },
-  btn: {
-    backgroundColor: "#111",
-    paddingVertical: 14,
-    paddingHorizontal: 14,
-    borderRadius: 14,
+  root: { flex: 1 },
+  bg: { flex: 1 },
+
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.10)",
   },
-  btnText: { color: "#fff", fontWeight: "900", fontSize: 16 },
+
+  header: {
+    paddingTop: 36,
+    paddingHorizontal: 16,
+    alignItems: "center",
+    gap: 2,
+  },
+  headerTitle: {
+    fontSize: 40,
+    fontWeight: "900",
+    color: "#fff",
+    textShadowColor: "rgba(0,0,0,0.35)",
+    textShadowRadius: 8,
+    textShadowOffset: { width: 0, height: 3 },
+  },
+
+  // 中央に縦3つを配置
+  mainArea: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 28,
+    paddingHorizontal: 16,
+    paddingTop:140,
+  },
+
+  // 下に横2つ
+  bottomArea: {
+    flexDirection: "row",
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingBottom: 22,
+  },
+  bottomCell: {
+    flex: 1,
+    alignItems: "center",
+  },
+
+  tileBase: {
+    backgroundColor: "rgba(255,255,255,0.92)",
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(0,0,0,0.10)",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    // 影（iOS）
+    shadowColor: "#000",
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    // 影（Android）
+    elevation: 2,
+  },
+
+  // 中央の3つは同じ幅で少し大きめ
+  tileMain: {
+    width: 210,
+    paddingVertical: 20,
+    paddingHorizontal: 12,
+  },
+
+  // 下の2つは少し小さめ・横幅はセルに合わせる
+  tileBottom: {
+    width: "100%",
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+  },
+
+  pressed: { opacity: 0.88, transform: [{ scale: 0.99 }] },
+
+  left: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  iconCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "rgba(0,0,0,0.06)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  label: {
+    fontSize: 24,
+    fontWeight: "900",
+    color: "#111",
+  },
+  rightPad: { width: 6 },
 });

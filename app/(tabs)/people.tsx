@@ -10,6 +10,7 @@ import {
 } from "react-native";
 
 import PersonEditorModal from "../../src/components/PersonEditorModal";
+import ScreenNav from "../../src/components/ScreenNav";
 import { BloodType, Gender, Person, useFamily } from "../../src/store/familyStore";
 
 const genders: { key: Gender; label: string }[] = [
@@ -78,6 +79,9 @@ const selectedParentId = useMemo(() => {
 
   return (
     <View style={styles.container}>
+      <View style={{ marginTop: 25 }}>
+      <ScreenNav title="家族登録" />
+      </View>
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
