@@ -1,12 +1,13 @@
-import React, { useMemo, useState } from "react";
-import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import React, { forwardRef, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { Image, Pressable, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import Svg, { Line } from "react-native-svg";
 import PersonEditorModal from "../../src/components/PersonEditorModal";
 import ScreenNav from "../../src/components/ScreenNav";
-
 import { Person, useFamily } from "../../src/store/familyStore";
 
-
+import { Ionicons } from "@expo/vector-icons";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 
 // ========= 見た目/レイアウト調整 =========
 const CARD_W = 170;
@@ -30,7 +31,8 @@ function calcAge(birthDate?: string) {
   const d = Number(m[3]);
   const now = new Date();
   let age = now.getFullYear() - y;
-  const beforeBirthday = now.getMonth() + 1 < mo || (now.getMonth() + 1 === mo && now.getDate() < d);
+  const beforeBirthday =
+    now.getMonth() + 1 < mo || (now.getMonth() + 1 === mo && now.getDate() < d);
   if (beforeBirthday) age--;
   if (age < 0 || age > 130) return "";
   return String(age);
@@ -67,11 +69,86 @@ type Link = {
   toPersonId: string;
 };
 
+// ========= ZoomPan（アイコン操作ズーム + ドラッグ移動） =========
+export type ZoomPanRef = {
+  zoomIn: () => void;
+  zoomOut: () => void;
+  reset: () => void;
+  getScale: () => number;
+};
+
+const ZoomPan = forwardRef(function ZoomPan(
+  {
+    children,
+    minScale = 0.6,
+    maxScale = 2.8,
+    step = 0.2,
+  }: {
+    children: React.ReactNode;
+    minScale?: number;
+    maxScale?: number;
+    step?: number;
+  },
+  ref: React.Ref<ZoomPanRef>
+) {
+  const scale = useSharedValue(1);
+  const tx = useSharedValue(0);
+  const ty = useSharedValue(0);
+
+  const startTx = useSharedValue(0);
+  const startTy = useSharedValue(0);
+
+  const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+
+  const setScale = (next: number) => {
+    const s = clamp(next, minScale, maxScale);
+    scale.value = withTiming(s, { duration: 160 });
+  };
+
+  useImperativeHandle(ref, () => ({
+    zoomIn: () => setScale(scale.value + step),
+    zoomOut: () => setScale(scale.value - step),
+    reset: () => {
+      scale.value = withTiming(1, { duration: 180 });
+      tx.value = withTiming(0, { duration: 180 });
+      ty.value = withTiming(0, { duration: 180 });
+    },
+    getScale: () => scale.value,
+  }));
+
+  // ドラッグ移動（パン）
+  const pan = Gesture.Pan()
+    .minDistance(3)
+    .onBegin(() => {
+      startTx.value = tx.value;
+      startTy.value = ty.value;
+    })
+    .onUpdate((e) => {
+      tx.value = startTx.value + e.translationX;
+      ty.value = startTy.value + e.translationY;
+    });
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: tx.value }, { translateY: ty.value }, { scale: scale.value }],
+  }));
+
+  return (
+    <View style={{ flex: 1, overflow: "hidden" }}>
+      <GestureDetector gesture={pan}>
+        <Animated.View style={animatedStyle}>{children}</Animated.View>
+      </GestureDetector>
+    </View>
+  );
+});
+
+// ========= 画面 =========
 export default function RealTreeScreen() {
   const { people, edges, spouses } = useFamily();
 
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingPerson, setEditingPerson] = useState<Person | null>(null);
+
+  const zoomRef = useRef<ZoomPanRef>(null);
 
   const peopleMap = useMemo(() => new Map(people.map((p) => [p.id, p])), [people]);
 
@@ -156,7 +233,6 @@ export default function RealTreeScreen() {
   // ユニットの表示サイズ
   const unitSize = (u: Unit) => {
     if (u.kind === "single") return { w: CARD_W, h: CARD_H };
-    // 「カード + gap + MARK + gap + カード」
     return { w: CARD_W + COUPLE_GAP + MARK_W + COUPLE_GAP + CARD_W, h: CARD_H };
   };
 
@@ -165,20 +241,13 @@ export default function RealTreeScreen() {
     const boxes: NodeBox[] = [];
     const unitById = new Map(units.map((u) => [u.unitId, u]));
 
-    const placed = new Set<string>(); // 既に配置済みユニット（多親ケースで重複配置しない）
-    const inStack = new Set<string>(); // 循環検出（保険）
+    const placed = new Set<string>();
+    const inStack = new Set<string>();
 
     function layout(unitId: string, level: number, leftX: number): { width: number; centerX: number } {
-      // ★ すでに配置済みなら、この親の配下には「再配置しない」
-      //    （線は edgeLinks で描画されるのでOK）
-      if (placed.has(unitId)) {
-        return { width: 0, centerX: leftX + CARD_W / 2 };
-      }
+      if (placed.has(unitId)) return { width: 0, centerX: leftX + CARD_W / 2 };
 
-      // ★ 循環（念のため）
-      if (inStack.has(unitId)) {
-        return { width: CARD_W, centerX: leftX + CARD_W / 2 };
-      }
+      if (inStack.has(unitId)) return { width: CARD_W, centerX: leftX + CARD_W / 2 };
       inStack.add(unitId);
 
       const u = unitById.get(unitId);
@@ -189,10 +258,8 @@ export default function RealTreeScreen() {
 
       const size = unitSize(u);
 
-      // ★ 既に配置済みの子は、この親のレイアウト計算から除外
       const kids = Array.from(childrenOfUnit.get(unitId) ?? []).filter((kid) => !placed.has(kid));
 
-      // 子を先に配置
       const childLayouts: { id: string; width: number; centerX: number }[] = [];
       let childrenTotal = 0;
 
@@ -210,7 +277,6 @@ export default function RealTreeScreen() {
       const subtreeW = Math.max(size.w, kids.length ? childrenTotal : 0);
       const topY = PAD + level * (CARD_H + LEVEL_GAP_Y);
 
-      // 親の中心を「子の左右中心」に合わせる（子が無ければ subtree中心）
       let centerX = leftX + subtreeW / 2;
       if (kids.length) {
         const first = childLayouts[0].centerX;
@@ -234,14 +300,12 @@ export default function RealTreeScreen() {
         h: size.h,
       });
 
-      // ★ ここで「配置済み」にする
       placed.add(unitId);
       inStack.delete(unitId);
 
       return { width: subtreeW, centerX };
     }
 
-    // ルートを左から並べる（roots が無い場合は全ユニット）
     let x = PAD;
     const starts = roots.length ? roots : units.map((u) => u.unitId);
     for (const r of starts) {
@@ -253,26 +317,19 @@ export default function RealTreeScreen() {
       return { boxes: [], links: [], canvasW: PAD + 400, canvasH: PAD + 400 };
     }
 
-    // 左に飛び出した分を補正（欠け防止）
     const minX = Math.min(...boxes.map((b) => b.x));
     const shiftX = minX < PAD ? PAD - minX : 0;
     if (shiftX !== 0) {
       for (const b of boxes) b.x += shiftX;
     }
 
-    // boxがある範囲だけ線を残す（欠け/参照ミス防止）
     const boxUnitIds = new Set(boxes.map((b) => b.unitId));
     const links = edgeLinks.filter((l) => boxUnitIds.has(l.fromUnitId) && boxUnitIds.has(l.toUnitId));
 
     const maxX = Math.max(...boxes.map((b) => b.x + b.w), PAD + 400);
     const maxY = Math.max(...boxes.map((b) => b.y + b.h), PAD + 400);
 
-    return {
-      boxes,
-      links,
-      canvasW: maxX + PAD,
-      canvasH: maxY + PAD,
-    };
+    return { boxes, links, canvasW: maxX + PAD, canvasH: maxY + PAD };
   }, [peopleMap, units, roots, childrenOfUnit, edgeLinks]);
 
   // 人がいない場合
@@ -287,58 +344,43 @@ export default function RealTreeScreen() {
 
   const boxMap = useMemo(() => new Map(boxes.map((b) => [b.unitId, b])), [boxes]);
 
-  // 親（夫婦なら左右どっちのカードか）に合わせて線の x を決める
   const parentAnchorX = (parentBox: NodeBox, parentPersonId: string) => {
     if (parentBox.kind !== "couple") return parentBox.x + parentBox.w / 2;
-
-    // 左（a側）
     if (parentBox.a.id === parentPersonId) return parentBox.x + CARD_W / 2;
-
-    // 右（b側）
     if (parentBox.b?.id === parentPersonId) {
       return parentBox.x + (CARD_W + COUPLE_GAP + MARK_W + COUPLE_GAP) + CARD_W / 2;
     }
-
     return parentBox.x + parentBox.w / 2;
   };
 
-  // 子（夫婦なら左右どっちのカードか）に合わせて線の x を決める
   const childAnchorX = (childBox: NodeBox, childPersonId: string) => {
     if (childBox.kind !== "couple") return childBox.x + childBox.w / 2;
-
-    // 左（a側）
     if (childBox.a.id === childPersonId) return childBox.x + CARD_W / 2;
-
-    // 右（b側）
     if (childBox.b?.id === childPersonId) {
       return childBox.x + (CARD_W + COUPLE_GAP + MARK_W + COUPLE_GAP) + CARD_W / 2;
     }
-
     return childBox.x + childBox.w / 2;
   };
 
   return (
     <View style={{ flex: 1, backgroundColor: BG }}>
-       <View style={{ marginTop: 40 }}>
-      <ScreenNav title="家系図" />
+      <View style={{ marginTop: 40 }}>
+        <ScreenNav title="家系図" />
       </View>
-      <View style={{ flex: 1, paddingTop: 70 }}>
 
-      {/* 横→縦の2重スクロールで “キャンバス” */}
-      <ScrollView horizontal showsHorizontalScrollIndicator>
-        <ScrollView showsVerticalScrollIndicator>
+      {/* ★ツリー表示エリア */}
+      <View style={{ flex: 1, paddingTop: 70 }}>
+        <ZoomPan ref={zoomRef} minScale={0.6} maxScale={2.8}>
           <View style={{ width: canvasW, height: canvasH, backgroundColor: BG }}>
-            
-            {/* 線（下地） */}
             <Svg width={canvasW} height={canvasH} style={StyleSheet.absoluteFill}>
               {links.map((ln, i) => {
                 const a = boxMap.get(ln.fromUnitId);
                 const b = boxMap.get(ln.toUnitId);
                 if (!a || !b) return null;
 
-                const x1 = parentAnchorX(a, ln.fromPersonId); // ← 親のカード側
+                const x1 = parentAnchorX(a, ln.fromPersonId);
                 const y1 = a.y + a.h;
-                const x2 = childAnchorX(b, ln.toPersonId); // ← 子のカード側
+                const x2 = childAnchorX(b, ln.toPersonId);
                 const y2 = b.y;
 
                 return (
@@ -351,7 +393,6 @@ export default function RealTreeScreen() {
               })}
             </Svg>
 
-            {/* 人物カード（上） */}
             {boxes.map((b) => (
               <UnitBox
                 key={b.unitId}
@@ -363,12 +404,29 @@ export default function RealTreeScreen() {
               />
             ))}
           </View>
-        </ScrollView>
-      </ScrollView>
-    </View>
+        </ZoomPan>
 
-      {/* 編集モーダル */}
-      <PersonEditorModal visible={editorOpen} person={editingPerson} onClose={() => setEditorOpen(false)} />
+        {/* ★ズーム操作ボタン（右下） */}
+        <View style={styles.zoomFabWrap}>
+          <Pressable style={styles.zoomFab} onPress={() => zoomRef.current?.zoomIn()}>
+            <Ionicons name="add" size={22} color="#111" />
+          </Pressable>
+
+          <Pressable style={styles.zoomFab} onPress={() => zoomRef.current?.zoomOut()}>
+            <Ionicons name="remove" size={22} color="#111" />
+          </Pressable>
+
+          <Pressable style={styles.zoomFab} onPress={() => zoomRef.current?.reset()}>
+            <Ionicons name="refresh" size={20} color="#111" />
+          </Pressable>
+        </View>
+      </View>
+
+      <PersonEditorModal
+        visible={editorOpen}
+        person={editingPerson}
+        onClose={() => setEditorOpen(false)}
+      />
     </View>
   );
 }
@@ -458,4 +516,27 @@ const styles = StyleSheet.create({
   name: { fontSize: 15, fontWeight: "900" },
   meta: { marginTop: 2, color: "#666", fontWeight: "800", fontSize: 12 },
   note: { marginTop: 6, color: "#444", fontSize: 12, fontWeight: "700" },
+
+  zoomFabWrap: {
+    position: "absolute",
+    right: 14,
+    bottom: 14,
+    gap: 10,
+  },
+  zoomFab: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(255,255,255,0.95)",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(0,0,0,0.12)",
+    shadowColor: "#000",
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
 });
+
