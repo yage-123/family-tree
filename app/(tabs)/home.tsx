@@ -16,6 +16,7 @@ const BG = require("../../assets/images/top1.png");
 const ROUTES = {
   tree: "/(tabs)/real-tree",
   people: "/(tabs)/people",
+  personAdd: "/(tabs)/person-add",
   manage: "/(tabs)/manage",
   help: "/(tabs)/help",
   settings: "/(tabs)/settings",
@@ -24,22 +25,24 @@ const ROUTES = {
 type Route = (typeof ROUTES)[keyof typeof ROUTES];
 
 type TileItem = {
+  id: string;
   label: string;
   to: Route;
   icon: React.ComponentProps<typeof Ionicons>["name"];
+  params?: Record<string, string>;
 };
 
 // 中央（縦3つ）
 const MAIN: TileItem[] = [
-  { label: "家系図", to: ROUTES.tree, icon: "git-network-outline" },
-  { label: "家族登録", to: ROUTES.people, icon: "person-add-outline" },
-  { label: "編集", to: ROUTES.manage, icon: "create-outline" },
+  { id: "tree",label: "家系図", to: ROUTES.tree, icon: "git-network-outline" },
+  { id: "add",label: "家族登録", to: ROUTES.manage, icon: "person-add-outline" , },
+  { id: "edit",label: "編集", to: ROUTES.people, icon: "create-outline" },
 ];
 
 // 下（横2つ）
 const BOTTOM: TileItem[] = [
-  { label: "説明書", to: ROUTES.help, icon: "help-circle-outline" },
-  { label: "環境設定", to: ROUTES.settings, icon: "settings-outline" },
+  {id: "hel", label: "説明書", to: ROUTES.help, icon: "help-circle-outline" },
+  {id: "set", label: "環境設定", to: ROUTES.settings, icon: "settings-outline" },
 ];
 
 function Tile({
@@ -56,8 +59,13 @@ function Tile({
         variant === "main" ? styles.tileMain : styles.tileBottom,
         pressed && styles.pressed,
       ]}
-      onPress={() => router.push(item.to)}
-    >
+      onPress={() => {
+        if (item.params) {
+        router.push({ pathname: item.to, params: item.params } as any);
+        } else {
+        router.push(item.to as any);
+        }
+      }}>
       <View style={styles.left}>
         <View style={styles.iconCircle}>
           <Ionicons name={item.icon} size={20} color="#111" />
@@ -84,7 +92,7 @@ export default function HomeScreen() {
         {/* 中央：縦3つ */}
         <View style={styles.mainArea}>
           {MAIN.map((m) => (
-            <Tile key={m.to} item={m} variant="main" />
+            <Tile key={m.id} item={m} variant="main" />
           ))}
         </View>
 

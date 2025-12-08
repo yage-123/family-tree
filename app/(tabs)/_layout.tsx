@@ -10,6 +10,8 @@ export default function TabsLayout() {
       <Tabs.Screen name="manage" options={{ title: "編集" }} />
       <Tabs.Screen name="settings" options={{ title: "環境設定" }} />
       <Tabs.Screen name="help" options={{ title: "説明書" }} />
+      {/* ★追加：タブには出さない */}
+      <Tabs.Screen name="person-add" options={{ title: "人物追加", href: null }} />
     </Tabs>
   );
 }

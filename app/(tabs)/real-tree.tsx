@@ -320,7 +320,7 @@ export default function RealTreeScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: BG }}>
        <View style={{ marginTop: 40 }}>
-      <ScreenNav title="実話家系図" />
+      <ScreenNav title="家系図" />
       </View>
       <View style={{ flex: 1, paddingTop: 70 }}>
 
